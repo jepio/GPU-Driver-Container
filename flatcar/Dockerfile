@@ -1,9 +1,10 @@
-FROM nvidia/cuda:11.7.1-base-ubuntu22.04
+ARG CUDA_VERSION=12.3.1
+FROM nvidia/cuda:${CUDA_VERSION}-base-ubuntu22.04 as build
+#FROM mediadepot/flatcar-developer:3874.0.0
 
 ENV NVIDIA_VISIBLE_DEVICES=void
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
-
 RUN dpkg --add-architecture i386 && \
     apt-get update && apt-get install -y --no-install-recommends \
         apt-transport-https \
@@ -13,12 +14,15 @@ RUN dpkg --add-architecture i386 && \
         build-essential \
         ca-certificates \
         curl \
+        gcc-12 \
         gnupg2 \
         jq \
         kmod \
         libc6:i386 \
         libelf-dev \
         libssl-dev \
+        patchelf \
+        pahole \
         fdisk \
         software-properties-common && \
     rm -rf /var/lib/apt/lists/*
@@ -34,7 +38,7 @@ RUN curl -fsSL -o /usr/local/bin/donkey https://github.com/3XX0/donkey/releases/
 
 #ARG BASE_URL=http://us.download.nvidia.com/XFree86/Linux-x86_64
 ARG BASE_URL=https://us.download.nvidia.com/tesla
-ARG DRIVER_VERSION=460.32.03
+ARG DRIVER_VERSION=535.161.07
 ENV DRIVER_VERSION=$DRIVER_VERSION
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -42,7 +46,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN cd /tmp && \
     curl -fSsl -O $BASE_URL/$DRIVER_VERSION/NVIDIA-Linux-x86_64-$DRIVER_VERSION.run && \
     sh NVIDIA-Linux-x86_64-$DRIVER_VERSION.run -x && \
-    cd NVIDIA-Linux-x86_64-$DRIVER_VERSION* && \
+    cd NVIDIA-Linux-x86_64-$DRIVER_VERSION*/ && \
     ./nvidia-installer --silent \
                        --no-kernel-module \
                        --install-compat32-libs \

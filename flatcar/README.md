@@ -94,6 +94,7 @@ $ git clone https://gitlab.com/nvidia/container-images/driver.git \
 ```bash
 $ DRIVER_VERSION=460.32.03 
 $ docker build --pull \
+    --build-arg DRIVER_VERSION=$DRIVER_VERSION \
     --tag nvidia/nvidia-driver-flatcar:${DRIVER_VERSION} \
     --file Dockerfile .
 ```
