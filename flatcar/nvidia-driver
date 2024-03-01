@@ -165,7 +165,7 @@ _create_driver_package() {
     fi
 
     export IGNORE_CC_MISMATCH=1
-    make -s -j$(nproc) CC=gcc-12 SYSSRC=/lib/modules/${KERNEL_VERSION}/build nv-linux.o nv-modeset-linux.o > /dev/null
+    make -s -j$(nproc) SYSSRC=/lib/modules/${KERNEL_VERSION}/build nv-linux.o nv-modeset-linux.o > /dev/null
 
     find -name '*.ko'
     echo "Relinking NVIDIA driver kernel modules..."
@@ -202,7 +202,7 @@ _create_driver_package() {
 # Load the kernel modules and start persistenced.
 _load_driver() {
     echo "Loading NVIDIA driver kernel modules..."
-    modprobe -d ${NVIDIA_KMODS_DIR} -a nvidia nvidia-uvm nvidia-modeset
+    modprobe -a nvidia nvidia-uvm nvidia-modeset
 
     echo "Starting NVIDIA persistence daemon..."
     nvidia-persistenced --persistence-mode
