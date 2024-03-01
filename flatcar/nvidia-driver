@@ -10,7 +10,9 @@ DRIVER_VERSION=${DRIVER_VERSION:?"Missing driver version"}
 #NVIDIA_KMODS_DIR=/opt/nvidia/${DRIVER_VERSION}
 GPU_DIRECT_RDMA_ENABLED=${GPU_DIRECT_RDMA_ENABLED:-false}
 
-KERNEL_TYPE=kernel
+
+OPEN_KERNEL_MODULES_ENABLED=${OPEN_KERNEL_MODULES_ENABLED:-false}
+[[ "${OPEN_KERNEL_MODULES_ENABLED}" == "true" ]] && KERNEL_TYPE=kernel-open || KERNEL_TYPE=kernel
 
 #export COREOS_RELEASE_CHANNEL=stable
 #COREOS_RELEASE_BOARD=amd64-usr
@@ -63,19 +65,23 @@ _relocate_flatcar() {
             --set-rpath /host-lib/usr/lib64 \
             "${host_tool}"
     done
+
+    pushd /lib/modules/${KERNEL_VERSION}/build
+    for i in ../source/include/*; do
+        ln -s ../$i include/
+    done
+    for i in ../source/arch/x86/include/*; do
+        ln -s ../../../$i arch/x86/include/
+    done
+    popd
 }
 
-_install_prerequisites() {
-    
-    rm -rf "/lib/modules/${KERNEL_VERSION}"
-    rm -rf /usr/src/linux*
-    #rm -rf /host-lib
-    
-    # Gather the tag for the release matching the current kernel version.
-    local kernel
-    kernel=$(echo "${KERNEL_VERSION}" | cut -d "-" -f1)
-    export COREOS_RELEASE_VERSION=$(curl -Ls "${COREOS_ALL_RELEASES}" | jq -r --arg kernel_ver "${kernel}" 'to_entries[] | select ((.value.major_software.kernel[0] == $kernel_ver) and (.key != "current")) | .key')
+_is_flatcar() {
+    nsenter -t 1 -m grep -q 'ID=flatcar' /etc/os-release
+}
 
+
+_fetch_flatcar_modules() {
     local versionid=$(. /host-etc/os-release; echo $VERSION_ID)
     local channel=
     local board=
@@ -102,14 +108,31 @@ _install_prerequisites() {
     curl --retry 3 -LJO "https://${channel}.release.flatcar-linux.net/${board}/${versionid}/flatcar-container.tar.gz"
     tar xf flatcar-container.tar.gz -C /lib/modules ./usr/lib/modules --strip-components 4
     tar xf flatcar-container.tar.gz -C /host-lib ./usr/lib64 --exclude=./usr/lib64/misc/*
-    pushd /lib/modules/${KERNEL_VERSION}/build
-    for i in ../source/include/*; do
-        ln -s ../$i include/
-    done
-    for i in ../source/arch/x86/include/*; do
-        ln -s ../../../$i arch/x86/include/
-    done
-    popd
+}
+
+_fetch_flatcar_modules_host() {
+    mkdir -p /host-lib
+    mkdir -p /lib/modules
+    nsenter -t 1 -m tar cpf - /lib/modules/${KERNEL_VERSION} | tar xpf - -C /
+    nsenter -t 1 -m tar cpf - /usr/lib64/ | tar xpf - -C /host-lib/
+}
+
+_install_prerequisites() {
+    
+    rm -rf "/lib/modules/${KERNEL_VERSION}"
+    rm -rf /usr/src/linux*
+    #rm -rf /host-lib
+    
+    # Gather the tag for the release matching the current kernel version.
+    #local kernel
+    #kernel=$(echo "${KERNEL_VERSION}" | cut -d "-" -f1)
+    #export COREOS_RELEASE_VERSION=$(curl -Ls "${COREOS_ALL_RELEASES}" | jq -r --arg kernel_ver "${kernel}" 'to_entries[] | select ((.value.major_software.kernel[0] == $kernel_ver) and (.key != "current")) | .key')
+
+    if _is_flatcar ; then
+      _fetch_flatcar_modules_host
+    else
+      _fetch_flatcar_modules
+    fi
 
     _relocate_flatcar
     mkdir -p /lib/modules/$(uname -r)/proc
