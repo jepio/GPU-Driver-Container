@@ -1,3 +1,4 @@
+ARG TARGETARCH
 ARG CUDA_VERSION=12.3.1
 FROM nvidia/cuda:${CUDA_VERSION}-base-ubuntu22.04 as build
 #FROM mediadepot/flatcar-developer:3874.0.0
@@ -5,7 +6,23 @@ FROM nvidia/cuda:${CUDA_VERSION}-base-ubuntu22.04 as build
 ENV NVIDIA_VISIBLE_DEVICES=void
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
-RUN dpkg --add-architecture i386 && \
+
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        echo "deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy main universe" > /etc/apt/sources.list && \
+        echo "deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy-updates main universe" >> /etc/apt/sources.list && \
+        echo "deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy-security main universe" >> /etc/apt/sources.list && \
+        usermod -o -u 0 -g 0 _apt ; \
+    elif [ "$TARGETARCH" = "arm64" ]; then \
+        echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy main universe" > /etc/apt/sources.list && \
+        echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-updates main universe" >> /etc/apt/sources.list && \
+        echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-security main universe" >> /etc/apt/sources.list && \
+        usermod -o -u 0 -g 0 _apt ; \
+    else \
+        echo "TARGETARCH doesn't match a known arch target" \
+        exit 1 ; \
+    fi
+
+RUN if [ "$TARGETARCH" = "amd64" ]; then dpkg --add-architecture i386 ; fi && \
     apt-get update && apt-get install -y --no-install-recommends \
         apt-transport-https \
         apt-utils \
@@ -18,7 +35,6 @@ RUN dpkg --add-architecture i386 && \
         gnupg2 \
         jq \
         kmod \
-        libc6:i386 \
         libelf-dev \
         libssl-dev \
         patchelf \
@@ -26,11 +42,6 @@ RUN dpkg --add-architecture i386 && \
         fdisk \
         software-properties-common && \
     rm -rf /var/lib/apt/lists/*
-
-RUN echo "deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy main" > /etc/apt/sources.list && \
-    echo "deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy-updates main" >> /etc/apt/sources.list && \
-    echo "deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy-security main" >> /etc/apt/sources.list && \
-    usermod -o -u 0 -g 0 _apt
 
 RUN curl -fsSL -o /usr/local/bin/donkey https://github.com/3XX0/donkey/releases/download/v1.1.0/donkey && \
     curl -fsSL -o /usr/local/bin/extract-vmlinux https://raw.githubusercontent.com/torvalds/linux/master/scripts/extract-vmlinux && \
