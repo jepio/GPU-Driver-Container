@@ -1,9 +1,11 @@
-ARG TARGETARCH
 ARG CUDA_VERSION=12.3.1
 FROM nvidia/cuda:${CUDA_VERSION}-base-ubuntu22.04 as build
 #FROM mediadepot/flatcar-developer:3874.0.0
 
 ENV NVIDIA_VISIBLE_DEVICES=void
+
+ARG TARGETARCH
+ENV TARGETARCH=$TARGETARCH
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
 
@@ -55,9 +57,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install the userspace components and copy the kernel module sources.
 RUN cd /tmp && \
-    curl -fSsl -O $BASE_URL/$DRIVER_VERSION/NVIDIA-Linux-x86_64-$DRIVER_VERSION.run && \
-    sh NVIDIA-Linux-x86_64-$DRIVER_VERSION.run -x && \
-    cd NVIDIA-Linux-x86_64-$DRIVER_VERSION*/ && \
+    DRIVER_ARCH="$TARGETARCH" && DRIVER_ARCH=${DRIVER_ARCH/amd64/x86_64} && DRIVER_ARCH=${DRIVER_ARCH/arm64/aarch64} && \
+    curl -fSsl -O $BASE_URL/$DRIVER_VERSION/NVIDIA-Linux-$DRIVER_ARCH-$DRIVER_VERSION.run && \
+    sh NVIDIA-Linux-${DRIVER_ARCH}-$DRIVER_VERSION.run -x && \
+    cd NVIDIA-Linux-${DRIVER_ARCH}-$DRIVER_VERSION*/ && \
     ./nvidia-installer --silent \
                        --no-kernel-module \
                        --install-compat32-libs \
