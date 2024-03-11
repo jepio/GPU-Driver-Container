@@ -82,7 +82,10 @@ _is_flatcar() {
 
 
 _fetch_flatcar_modules() {
-    local versionid=$(. /host-etc/os-release; echo $VERSION_ID)
+    local versionid=$1
+    if [ -z "$versionid" ]; then
+      versionid=$(. /host-etc/os-release; echo $VERSION_ID)
+    fi
     local channel=
     local board=
     case "$versionid" in
@@ -108,6 +111,7 @@ _fetch_flatcar_modules() {
     curl --retry 3 -LJO "https://${channel}.release.flatcar-linux.net/${board}/${versionid}/flatcar-container.tar.gz"
     tar xf flatcar-container.tar.gz -C /lib/modules ./usr/lib/modules --strip-components 4
     tar xf flatcar-container.tar.gz -C /host-lib ./usr/lib64 --exclude=./usr/lib64/misc/*
+    KERNEL_VERSION="$(ls /lib/modules/)"
 }
 
 _fetch_flatcar_modules_host() {
@@ -118,8 +122,14 @@ _fetch_flatcar_modules_host() {
 }
 
 _install_prerequisites() {
-    
-    rm -rf "/lib/modules/${KERNEL_VERSION}"
+    if [ -n "${FLATCAR_VERSION}" ]; then
+      _fetch_flatcar_modules "${FLATCAR_VERSION}"
+    elif is_flatcar; then
+      _fetch_flatcar_modules_host
+    else
+      _fetch_flatcar_modules
+    fi
+
     rm -rf /usr/src/linux*
     #rm -rf /host-lib
     
@@ -128,15 +138,10 @@ _install_prerequisites() {
     #kernel=$(echo "${KERNEL_VERSION}" | cut -d "-" -f1)
     #export COREOS_RELEASE_VERSION=$(curl -Ls "${COREOS_ALL_RELEASES}" | jq -r --arg kernel_ver "${kernel}" 'to_entries[] | select ((.value.major_software.kernel[0] == $kernel_ver) and (.key != "current")) | .key')
 
-    if _is_flatcar ; then
-      _fetch_flatcar_modules_host
-    else
-      _fetch_flatcar_modules
-    fi
-
     _relocate_flatcar
-    mkdir -p /lib/modules/$(uname -r)/proc
-    cp /proc/version /lib/modules/$(uname -r)/proc
+
+    mkdir -p /lib/modules/${KERNEL_VERSION}/proc
+    cp /proc/version /lib/modules/${KERNEL_VERSION}/proc
 }
 
 # Check if the kernel version requires a new precompiled driver packages.
@@ -292,7 +297,7 @@ _install_driver() {
     if [ "${ACCEPT_LICENSE}" = "yes" ]; then
         install_args+=("--accept-license")
     fi
-    IGNORE_CC_MISMATCH=1 nvidia-installer --kernel-module-only --no-drm --ui=none --no-nouveau-check -m=${KERNEL_TYPE} ${install_args[@]+"${install_args[@]}"}
+    IGNORE_CC_MISMATCH=1 nvidia-installer --kernel-name "${KERNEL_VERSION}" --kernel-module-only --no-drm --ui=none --no-nouveau-check -m=${KERNEL_TYPE} ${install_args[@]+"${install_args[@]}"}
 }
 
 # Execute binaries by root owning them first
@@ -423,7 +428,7 @@ fi
 command=$1; shift
 case "${command}" in
     init) options=$(getopt -l accept-license -o a -- "$@") ;;
-    update) options=$(getopt -l kernel:,sign:,tag: -o k:s:t: -- "$@") ;;
+    update) options=$(getopt -l kernel:,sign:,tag: -o f:k:s:t: -- "$@") ;;
     *) usage ;;
 esac
 if [ $? -ne 0 ]; then
@@ -433,6 +438,7 @@ eval set -- "${options}"
 
 ACCEPT_LICENSE=""
 KERNEL_VERSION=$(uname -r)
+FLATCAR_VERSION=
 PRIVATE_KEY=""
 PACKAGE_TAG=""
 
@@ -440,6 +446,7 @@ for opt in ${options}; do
     case "$opt" in
     -a | --accept-license) ACCEPT_LICENSE="yes"; shift 1 ;;
     -k | --kernel) KERNEL_VERSION=$2; shift 2 ;;
+    -f | --flatcar) FLATCAR_VERSION=$2; shift 2 ;;
     -s | --sign) PRIVATE_KEY=$2; shift 2 ;;
     -t | --tag) PACKAGE_TAG=$2; shift 2 ;;
     --) shift; break ;;
